@@ -1,5 +1,92 @@
-## 0.7.3 (unreleased)
+## 0.8.2 (unreleased)
 
+
+
+## 0.8.1 (July 20, 2011)
+
+  - Repush of 0.8.0 to fix a Ruby 1.9.2 RubyGems issue.
+
+## 0.8.0 (July 20, 2011)
+
+  - VirtualBox 4.1 support _only_. Previous versions of VirtualBox
+    are supported by earlier versions of Vagrant.
+  - Performance optimizations in `virtualbox` gem. Huge speed gains.
+  - `:chef_server` provisioner is now `:chef_client`. [GH-359]
+  - SSH connection is now cached after first access internally,
+    speeding up `vagrant up`, `reload`, etc. quite a bit.
+  - Actions which modify the VM now occur much more quickly,
+    greatly speeding up `vagrant up`, `reload`, etc.
+  - SUSE host only networking support. [GH-369]
+  - Show nice error message for invalid HTTP responses for HTTP
+    downloader. [GH-403]
+  - New `:inline` option for shell provisioner to provide inline
+    scripts as a string. [GH-395]
+  - Host only network now properly works on multiple adapters. [GH-365]
+  - Can now specify owner/group for regular shared folders. [GH-350]
+  - `ssh_config` host name will use VM name if given. [GH-332]
+  - `ssh` `-e` flag changed to `-c` to align with `ssh` standard
+    behavior. [GH-323]
+  - Forward agent and forward X11 settings properly appear in
+    `ssh_config` output. [GH-105]
+  - Chef JSON can now be set with `chef.json =` instead of the old
+    `merge` technique. [GH-314]
+  - Provisioner configuration is no longer cleared when the box
+    needs to be downloaded during an `up`. [GH-308]
+  - Multiple Chef provisioners no longer overwrite cookbook folders. [GH-407]
+  - `package` won't delete previously existing file. [GH-408]
+  - Vagrantfile can be lowercase now. [GH-399]
+  - Only one copy of Vagrant may be running at any given time. [GH-364]
+  - Default home directory for Vagrant moved to `~/.vagrant.d` [GH-333]
+  - Specify a `forwarded_port_destination` for SSH configuration and
+    SSH port searching will fall back to that if it can't find any
+    other port. [GH-375]
+
+## 0.7.8 (July 19, 2011)
+
+  - Make sure VirtualBox version check verifies that it is 4.0.x.
+
+## 0.7.7 (July 12, 2011)
+
+  - Fix crashing bug with Psych and Ruby 1.9.2. [GH-411]
+
+## 0.7.6 (July 2, 2011)
+
+  - Run Chef commands in a single command. [GH-390]
+  - Add `nfs` option for Chef to mount Chef folders via NFS. [GH-378]
+  - Add translation for `aborted` state in VM. [GH-371]
+  - Use full paths with the Chef provisioner so that restart cookbook will
+    work. [GH-374]
+  - Add "--no-color" as an argument and no colorized output will be used. [GH-379]
+  - Added DEVICE option to the RedHat host only networking entry, which allows
+    host only networking to work even if the VM has multiple NICs. [GH-382]
+  - Touch the network configuration file for RedHat so that the `sed` works
+    with host only networking. [GH-381]
+  - Load prerelease versions of plugins if available.
+  - Do not load a plugin if it depends on an invalid version of Vagrant.
+  - Encrypted data bag support in Chef server provisioner. [GH-398]
+  - Use the `-H` flag to set the proper home directory for `sudo`. [GH-370]
+
+## 0.7.5 (May 16, 2011)
+
+  - `config.ssh.port` can be specified and takes highest precedence if specified.
+    Otherwise, Vagrant will still attempt to auto-detect the port. [GH-363]
+  - Get rid of RubyGems deprecations introduced with RubyGems 1.8.x
+  - Search in pre-release gems for plugins as well as release gems.
+  - Support for Chef-solo `data_bags_path` [GH-362]
+  - Can specify path to Chef binary using `binary_path` [GH-342]
+  - Can specify additional environment data for Chef using `binary_env` [GH-342]
+
+## 0.7.4 (May 12, 2011)
+
+  - Chef environments support (for Chef 0.10) [GH-358]
+  - Suppress the "added to known hosts" message for SSH [GH-354]
+  - Ruby 1.8.6 support [GH-352]
+  - Chef proxy settings now work for chef server [GH-335]
+
+## 0.7.3 (April 19, 2011)
+
+  - Retry all SSH on Net::SSH::Disconnect in case SSH is just restarting. [GH-313]
+  - Add NFS shared folder support for Arch linux. [GH-346]
   - Fix issue with unknown terminal type output for sudo commands.
   - Forwarded port protocol can now be set as UDP. [GH-311]
   - Chef server file cache path and file backup path can be configured. [GH-310]

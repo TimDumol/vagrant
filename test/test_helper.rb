@@ -2,7 +2,6 @@
 $:.unshift(File.dirname(__FILE__))
 
 require 'vagrant'
-require 'mario'
 require 'contest'
 require 'mocha'
 
@@ -14,8 +13,11 @@ begin
 rescue LoadError
 end
 
-# Silence Mario by sending log output to black hole
-Mario::Platform.logger(nil)
+# Set the home directory to some temporary directory
+ENV["HOME"] = Vagrant.source_root.join("test", "tmp", "home").to_s
+
+# Set the log output to nothing
+ENV["VAGRANT_LOG"] = "NULL"
 
 # Add the I18n locale for tests
 I18n.load_path << File.expand_path("../locales/en.yml", __FILE__)

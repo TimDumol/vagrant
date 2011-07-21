@@ -83,14 +83,16 @@ module Vagrant
         def call(env)
           @env = env
 
-          forward_ports
+          proc = lambda do |vm|
+            env.ui.info I18n.t("vagrant.actions.vm.forward_ports.forwarding")
+            forward_ports(vm)
+          end
 
+          env["vm.modify"].call(proc)
           @app.call(env)
         end
 
-        def forward_ports
-          @env.ui.info I18n.t("vagrant.actions.vm.forward_ports.forwarding")
-
+        def forward_ports(vm)
           @env.env.config.vm.forwarded_ports.each do |name, options|
             adapter = options[:adapter]
             message_attributes = {
@@ -103,16 +105,13 @@ module Vagrant
             # Assuming the only reason to establish port forwarding is because the VM is using Virtualbox NAT networking.
             # Host-only or Bridged networking don't require port-forwarding and establishing forwarded ports on these
             # attachment types has uncertain behaviour.
-            if @env["vm"].vm.network_adapters[adapter].attachment_type == :nat
+            if vm.network_adapters[adapter].attachment_type == :nat
               @env.ui.info(I18n.t("vagrant.actions.vm.forward_ports.forwarding_entry", message_attributes))
-              forward_port(name, options)
+              forward_port(vm, name, options)
             else
               @env.ui.info(I18n.t("vagrant.actions.vm.forward_ports.non_nat", message_attributes))
             end
           end
-
-          @env["vm"].vm.save
-          @env["vm"].reload!
         end
 
         #--------------------------------------------------------------
@@ -120,13 +119,13 @@ module Vagrant
         #--------------------------------------------------------------
 
         # Forwards a port.
-        def forward_port(name, options)
+        def forward_port(vm, name, options)
           port = VirtualBox::NATForwardedPort.new
           port.name = name
           port.guestport = options[:guestport]
           port.hostport = options[:hostport]
           port.protocol = options[:protocol] || :tcp
-          @env["vm"].vm.network_adapters[options[:adapter]].nat_driver.forwarded_ports << port
+          vm.network_adapters[options[:adapter]].nat_driver.forwarded_ports << port
         end
       end
     end

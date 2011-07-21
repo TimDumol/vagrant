@@ -148,6 +148,21 @@ module Vagrant
       error_key(:socket_error, "vagrant.downloaders.http")
     end
 
+    class DownloaderHTTPStatusError < VagrantError
+      status_code(51)
+      error_key(:status_error, "vagrant.downloaders.http")
+    end
+
+    class EnvironmentLockedError < VagrantError
+      status_code(52)
+      error_key(:environment_locked)
+    end
+
+    class HomeDirectoryMigrationFailed < VagrantError
+      status_code(53)
+      error_key(:home_dir_migration_failed)
+    end
+
     class ForwardPortAutolistEmpty < VagrantError
       status_code(27)
       error_key(:auto_empty, "vagrant.actions.vm.forward_ports")

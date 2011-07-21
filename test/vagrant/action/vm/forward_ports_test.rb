@@ -8,6 +8,7 @@ class ForwardPortsVMActionTest < Test::Unit::TestCase
     @vm = mock("vm")
     @vm.stubs(:name).returns("foo")
     @env["vm"] = @vm
+    @env["vm.modify"] = mock("proc")
   end
 
   context "initializing" do
@@ -123,6 +124,12 @@ class ForwardPortsVMActionTest < Test::Unit::TestCase
     context "calling" do
       should "clear all previous ports and forward new ports" do
         exec_seq = sequence("exec_seq")
+
+        @env["vm.modify"].expects(:call).with() do |proc|
+          proc.call(@internal_vm)
+          true
+        end
+
         @instance.expects(:forward_ports).once.in_sequence(exec_seq)
         @app.expects(:call).once.with(@env).in_sequence(exec_seq)
         @instance.call(@env)
@@ -143,9 +150,8 @@ class ForwardPortsVMActionTest < Test::Unit::TestCase
         network_adapter.expects(:attachment_type).returns(:nat)
 
         @instance.expects(:forward_port).once
-        @internal_vm.expects(:save).once
-        @vm.expects(:reload!).once
-        @instance.forward_ports
+
+        @instance.forward_ports(@internal_vm)
       end
 
       should "not port forward for non NAT interfaces" do
@@ -154,9 +160,8 @@ class ForwardPortsVMActionTest < Test::Unit::TestCase
 
         @internal_vm.expects(:network_adapters).returns([network_adapter])
         network_adapter.expects(:attachment_type).returns(:host_only)
-        @internal_vm.expects(:save).once
-        @vm.expects(:reload!).once
-        @instance.forward_ports
+
+        @instance.forward_ports(@internal_vm)
       end
     end
 
@@ -169,7 +174,8 @@ class ForwardPortsVMActionTest < Test::Unit::TestCase
       end
 
       should "forward ports" do
-        name, opts = @env.env.config.vm.forwarded_ports.first
+        name = @env.env.config.vm.forwarded_ports.keys.first
+        opts = @env.env.config.vm.forwarded_ports[name]
 
         adapters = []
         adapter = mock("adapter")
@@ -187,7 +193,7 @@ class ForwardPortsVMActionTest < Test::Unit::TestCase
         adapters[opts[:adapter]] = adapter
         @internal_vm.stubs(:network_adapters).returns(adapters)
 
-        @instance.forward_port(name, opts)
+        @instance.forward_port(@internal_vm, name, opts)
       end
     end
   end

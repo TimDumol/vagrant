@@ -1,16 +1,17 @@
-require 'timeout'
 require 'net/ssh'
 require 'net/scp'
-require 'mario'
-
-require 'vagrant/ssh/session'
 
 module Vagrant
   # Manages SSH access to a specific environment. Allows an environment to
   # replace the process with SSH itself, run a specific set of commands,
   # upload files, or even check if a host is up.
   class SSH
+    # Autoload this guy because he is really only used in one location
+    # and not for every Vagrant command.
+    autoload :Session, 'vagrant/ssh/session'
+
     include Util::Retryable
+    include Util::SafeExec
 
     # Reference back up to the environment which this SSH object belongs
     # to
@@ -18,13 +19,14 @@ module Vagrant
 
     def initialize(environment)
       @env = environment
+      @current_session = nil
     end
 
     # Connects to the environment's virtual machine, replacing the ruby
     # process with an SSH process. This method optionally takes a hash
     # of options which override the configuration values.
     def connect(opts={})
-      if Mario::Platform.windows?
+      if Util::Platform.windows?
         raise Errors::SSHUnavailableWindows, :key_path => env.config.ssh.private_key_path,
                                              :ssh_port => port(opts)
       end
@@ -42,7 +44,7 @@ module Vagrant
       # Command line options
       command_options = ["-p #{options[:port]}", "-o UserKnownHostsFile=/dev/null",
                          "-o StrictHostKeyChecking=no", "-o IdentitiesOnly=yes",
-                         "-i #{options[:private_key_path]}"]
+                         "-i #{options[:private_key_path]}", "-o LogLevel=ERROR"]
       command_options << "-o ForwardAgent=yes" if env.config.ssh.forward_agent
 
       if env.config.ssh.forward_x11
@@ -54,10 +56,9 @@ module Vagrant
       # Some hackery going on here. On Mac OS X Leopard (10.5), exec fails
       # (GH-51). As a workaround, we fork and wait. On all other platforms,
       # we simply exec.
-      pid = nil
-      pid = fork if Util::Platform.leopard? || Util::Platform.tiger?
-      Kernel.exec "ssh #{command_options.join(" ")} #{options[:username]}@#{options[:host]}".strip if pid.nil?
-      Process.wait(pid) if pid
+      command = "ssh #{command_options.join(" ")} #{options[:username]}@#{options[:host]}".strip
+      env.logger.info("ssh") { "Invoking SSH: #{command}" }
+      safe_exec(command)
     end
 
     # Opens an SSH connection to this environment's virtual machine and yields
@@ -71,17 +72,37 @@ module Vagrant
       opts[:forward_agent] = true if env.config.ssh.forward_agent
       opts[:port] ||= port
 
-      retryable(:tries => 5, :on => Errno::ECONNREFUSED) do
-        Net::SSH.start(env.config.ssh.host,
-                       env.config.ssh.username,
-                       opts.merge( :keys => [env.config.ssh.private_key_path],
-                                   :keys_only => true,
-                                   :user_known_hosts_file => [],
-                                   :paranoid => false,
-                                   :config => false)) do |ssh|
-          yield SSH::Session.new(ssh, env)
+      # Check if we have a currently open SSH session which has the
+      # same options, and use that if possible
+      session, options = @current_session
+
+      if !session || options != opts
+        env.logger.info("ssh") { "Connecting to SSH: #{env.config.ssh.host} #{opts[:port]}" }
+
+        # The exceptions which are acceptable to retry on during
+        # attempts to connect to SSH
+        exceptions = [Errno::ECONNREFUSED, Net::SSH::Disconnect]
+
+        # Connect to SSH and gather the session
+        session = retryable(:tries => 5, :on => exceptions) do
+          connection = Net::SSH.start(env.config.ssh.host,
+                         env.config.ssh.username,
+                         opts.merge( :keys => [env.config.ssh.private_key_path],
+                                     :keys_only => true,
+                                     :user_known_hosts_file => [],
+                                     :paranoid => false,
+                                     :config => false))
+          SSH::Session.new(connection, env)
         end
+
+        # Save the new session along with the options which created it
+        @current_session = [session, opts]
+      else
+        env.logger.info("ssh") { "Using cached SSH session: #{session}" }
       end
+
+      # Yield our session for executing
+      return yield session if block_given?
     rescue Errno::ECONNREFUSED
       raise Errors::SSHConnectionRefused
     end
@@ -107,6 +128,7 @@ module Vagrant
       # Windows
       ssh_port = port
 
+      require 'timeout'
       Timeout.timeout(env.config.ssh.timeout) do
         execute(:timeout => env.config.ssh.timeout,
                 :port => ssh_port) { |ssh| }
@@ -124,13 +146,16 @@ module Vagrant
     # if needed, or on failure erroring.
     def check_key_permissions(key_path)
       # Windows systems don't have this issue
-      return if Mario::Platform.windows?
+      return if Util::Platform.windows?
+
+      env.logger.info("ssh") { "Checking key permissions: #{key_path}" }
 
       stat = File.stat(key_path)
 
       if stat.owned? && file_perms(key_path) != "600"
-        File.chmod(0600, key_path)
+        env.logger.info("ssh") { "Attempting to correct key permissions to 0600" }
 
+        File.chmod(0600, key_path)
         raise Errors::SSHKeyBadPermissions, :key_path => key_path if file_perms(key_path) != "600"
       end
     rescue Errno::EPERM
@@ -151,20 +176,32 @@ module Vagrant
     # `config.ssh.forwarded_port_key`.
     def port(opts={})
       # Check if port was specified in options hash
-      pnum = opts[:port]
-      return pnum if pnum
+      return opts[:port] if opts[:port]
+
+      # Check if a port was specified in the config
+      return env.config.ssh.port if env.config.ssh.port
 
       # Check if we have an SSH forwarded port
-      pnum = nil
+      pnum_by_name = nil
+      pnum_by_destination = nil
       env.vm.vm.network_adapters.each do |na|
-        pnum = na.nat_driver.forwarded_ports.detect do |fp|
+        # Look for the port number by name...
+        pnum_by_name = na.nat_driver.forwarded_ports.detect do |fp|
           fp.name == env.config.ssh.forwarded_port_key
         end
 
-        break if pnum
+        # Look for the port number by destination...
+        pnum_by_destination = na.nat_driver.forwarded_ports.detect do |fp|
+          fp.guestport == env.config.ssh.forwarded_port_destination
+        end
+
+        # pnum_by_name is what we're looking for here, so break early
+        # if we have it.
+        break if pnum_by_name
       end
 
-      return pnum.hostport if pnum
+      return pnum_by_name.hostport if pnum_by_name
+      return pnum_by_destination.hostport if pnum_by_destination
 
       # This should NEVER happen.
       raise Errors::SSHPortNotDetected

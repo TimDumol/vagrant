@@ -13,6 +13,7 @@ module Vagrant
 
           return :gentoo if ssh.test?("cat /etc/gentoo-release")
           return :redhat if ssh.test?("cat /etc/redhat-release")
+          return :suse if ssh.test?("cat /etc/SuSE-release")
         end
 
         # Can't detect the distro, assume vanilla linux
@@ -37,10 +38,10 @@ module Vagrant
         end
       end
 
-      def mount_shared_folder(ssh, name, guestpath)
+      def mount_shared_folder(ssh, name, guestpath, owner, group)
         ssh.exec!("sudo mkdir -p #{guestpath}")
-        mount_folder(ssh, name, guestpath)
-        ssh.exec!("sudo chown #{vm.env.config.ssh.username} #{guestpath}")
+        mount_folder(ssh, name, guestpath, owner, group)
+        ssh.exec!("sudo chown `id -u #{owner}`:`id -g #{group}` #{guestpath}")
       end
 
       def mount_nfs(ip, folders)
@@ -57,16 +58,13 @@ module Vagrant
       #-------------------------------------------------------------------
       # "Private" methods which assist above methods
       #-------------------------------------------------------------------
-      def mount_folder(ssh, name, guestpath, sleeptime=5)
+      def mount_folder(ssh, name, guestpath, owner, group, sleeptime=5)
         # Determine the permission string to attach to the mount command
-        perms = []
-        perms << "uid=`id -u #{vm.env.config.vm.shared_folder_uid}`"
-        perms << "gid=`id -g #{vm.env.config.vm.shared_folder_gid}`"
-        perms = " -o #{perms.join(",")}" if !perms.empty?
+        options = "-o uid=`id -u #{owner}`,gid=`id -g #{group}`"
 
         attempts = 0
         while true
-          result = ssh.exec!("sudo mount -t vboxsf#{perms} #{name} #{guestpath}") do |ch, type, data|
+          result = ssh.exec!("sudo mount -t vboxsf #{options} #{name} #{guestpath}") do |ch, type, data|
             # net/ssh returns the value in ch[:result] (based on looking at source)
             ch[:result] = !!(type == :stderr && data =~ /No such device/i)
           end

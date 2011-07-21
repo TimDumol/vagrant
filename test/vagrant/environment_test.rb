@@ -1,5 +1,6 @@
 require "test_helper"
 require "pathname"
+require "tempfile"
 
 class EnvironmentTest < Test::Unit::TestCase
   setup do
@@ -57,6 +58,12 @@ class EnvironmentTest < Test::Unit::TestCase
     context "home path" do
       setup do
         @env = @klass.new
+
+        # Make a fake home directory for helping with tests
+        @home_path = tmp_path.join("home")
+        ENV["HOME"] = @home_path.to_s
+        FileUtils.rm_rf(@home_path)
+        FileUtils.mkdir_p(@home_path)
       end
 
       should "return the home path if it loaded" do
@@ -71,6 +78,36 @@ class EnvironmentTest < Test::Unit::TestCase
 
         expected = Pathname.new(File.expand_path(ENV["VAGRANT_HOME"]))
         assert_equal expected, @env.home_path
+      end
+
+      should "move the old home directory to the new location" do
+        new_path = @home_path.join(".vagrant.d")
+        old_path = @home_path.join(".vagrant")
+        old_path.mkdir
+
+        # Get the home path
+        ENV["VAGRANT_HOME"] = new_path.to_s
+
+        assert !new_path.exist?
+        assert_equal new_path, @env.home_path
+        assert !old_path.exist?
+        assert new_path.exist?
+      end
+
+      should "not move the old home directory if the new one already exists" do
+        new_path = @home_path.join(".vagrant.d")
+        new_path.mkdir
+
+        old_path = @home_path.join(".vagrant")
+        old_path.mkdir
+
+        # Get the home path
+        ENV["VAGRANT_HOME"] = new_path.to_s
+
+        assert new_path.exist?
+        assert_equal new_path, @env.home_path
+        assert old_path.exist?
+        assert new_path.exist?
       end
     end
 
@@ -219,12 +256,9 @@ class EnvironmentTest < Test::Unit::TestCase
 
   context "loading logger" do
     should "lazy load the logger only once" do
-      result = Vagrant::Util::ResourceLogger.new("vagrant", vagrant_env)
-      Vagrant::Util::ResourceLogger.expects(:new).returns(result).once
       env = vagrant_env
-      assert_equal result, env.logger
-      assert_equal result, env.logger
-      assert_equal result, env.logger
+      result = env.logger
+      assert result === env.logger
     end
 
     should "return the parent's logger if a parent exists" do
@@ -233,10 +267,7 @@ class EnvironmentTest < Test::Unit::TestCase
         config.vm.define :db
       vf
 
-      result = env.logger
-
-      Vagrant::Util::ResourceLogger.expects(:new).never
-      assert env.vms[:web].env.logger.equal?(result)
+      assert env.logger === env.vms[:web].env.logger
     end
   end
 
@@ -248,20 +279,23 @@ class EnvironmentTest < Test::Unit::TestCase
                Pathname.new("/")
               ]
 
+      rootfile = "Foo"
+
       search_seq = sequence("search_seq")
       paths.each do |path|
-        File.expects(:exist?).with(path.join(@klass::ROOTFILE_NAME).to_s).returns(false).in_sequence(search_seq)
+        File.expects(:exist?).with(path.join(rootfile).to_s).returns(false).in_sequence(search_seq)
         File.expects(:exist?).with(path).returns(true).in_sequence(search_seq) if !path.root?
       end
 
-      assert !@klass.new(:cwd => paths.first).root_path
+      assert !@klass.new(:cwd => paths.first, :vagrantfile_name => rootfile).root_path
     end
 
     should "should set the path for the rootfile" do
+      rootfile = "Foo"
       path = Pathname.new(File.expand_path("/foo"))
-      File.expects(:exist?).with(path.join(@klass::ROOTFILE_NAME).to_s).returns(true)
+      File.expects(:exist?).with(path.join(rootfile).to_s).returns(true)
 
-      assert_equal path, @klass.new(:cwd => path).root_path
+      assert_equal path, @klass.new(:cwd => path, :vagrantfile_name => rootfile).root_path
     end
 
     should "not infinite loop on relative paths" do
@@ -269,8 +303,9 @@ class EnvironmentTest < Test::Unit::TestCase
     end
 
     should "only load the root path once" do
-      env = @klass.new
-      File.expects(:exist?).with(env.cwd.join(@klass::ROOTFILE_NAME).to_s).returns(true).once
+      rootfile = "foo"
+      env = @klass.new(:vagrantfile_name => rootfile)
+      File.expects(:exist?).with(env.cwd.join(rootfile).to_s).returns(true).once
 
       assert_equal env.cwd, env.root_path
       assert_equal env.cwd, env.root_path
@@ -284,6 +319,66 @@ class EnvironmentTest < Test::Unit::TestCase
       assert env.root_path.nil?
       assert env.root_path.nil?
       assert env.root_path.nil?
+    end
+  end
+
+  context "locking" do
+    setup do
+      @instance = @klass.new(:lock_path => Tempfile.new('vagrant-test').path)
+    end
+
+    should "allow nesting locks" do
+      assert_nothing_raised do
+        @instance.lock do
+          @instance.lock do
+            # Nothing
+          end
+        end
+      end
+    end
+
+    should "raise an exception if an environment already has a lock" do
+      @another = @klass.new(:lock_path => @instance.lock_path)
+
+      # Create first locked thread which should succeed
+      first = Thread.new do
+        begin
+          @instance.lock do
+            Thread.current[:locked] = true
+            loop { sleep 1000 }
+          end
+        rescue Vagrant::Errors::EnvironmentLockedError
+          Thread.current[:locked] = false
+        end
+      end
+
+      # Wait until the first thread has acquired the lock
+      loop do
+        break if first[:locked] || !first.alive?
+        Thread.pass
+      end
+
+      # Verify that the fist got the lock
+      assert first[:locked]
+
+      # Create second locked thread which should fail
+      second = Thread.new do
+        begin
+          @another.lock do
+            Thread.current[:error] = false
+          end
+        rescue Vagrant::Errors::EnvironmentLockedError
+          Thread.current[:error] = true
+        end
+      end
+
+      # Wait for the second to end and verify it failed
+      second.join
+      assert second[:error]
+
+      # Make sure both threads are killed
+      first.kill
+      second.kill
     end
   end
 
@@ -428,11 +523,6 @@ class EnvironmentTest < Test::Unit::TestCase
         assert_equal "root.box", @env.config.package.name
         assert_equal "web.box", @env.vms[:web].env.config.package.name
         assert_equal "set", @env.vms[:web].env.config.vm.base_mac
-      end
-
-      should "reload the logger after executing" do
-        @env.load_config!
-        assert @env.instance_variable_get(:@logger).nil?
       end
 
       should "be able to reload config" do

@@ -2,37 +2,30 @@ module Vagrant
   class Action
     module VM
       class Provision
-        attr_reader :provisioners
-
         def initialize(app, env)
           @app = app
           @env = env
           @env["provision.enabled"] = true if !@env.has_key?("provision.enabled")
-          @provisioners = []
-
-          load_provisioners if provisioning_enabled?
         end
 
         def call(env)
+          # Instantiate and prepare the provisioners. Preparation must happen here
+          # so that shared folders and such can properly take effect.
+          provisioners = enabled_provisioners
+          provisioners.map { |p| p.prepare }
+
           @app.call(env)
 
-          @provisioners.each do |instance|
+          # Take prepared provisioners and run the provisioning
+          provisioners.each do |instance|
             @env.ui.info I18n.t("vagrant.actions.vm.provision.beginning", :provisioner => instance.class)
             instance.provision!
           end
         end
 
-        def provisioning_enabled?
-          !@env["config"].vm.provisioners.empty? && @env["provision.enabled"]
-        end
-
-        def load_provisioners
-          @env["config"].vm.provisioners.each do |provisioner|
-            @env.ui.info I18n.t("vagrant.actions.vm.provision.enabled", :provisioner => provisioner.shortcut)
-
-            instance = provisioner.provisioner.new(@env, provisioner.config)
-            instance.prepare
-            @provisioners << instance
+        def enabled_provisioners
+          @env["config"].vm.provisioners.map do |provisioner|
+            provisioner.provisioner.new(@env, provisioner.config)
           end
         end
       end

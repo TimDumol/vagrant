@@ -16,6 +16,13 @@ module Vagrant
         end
       end
 
+      # Returns the path to the Chef binary, taking into account the
+      # `binary_path` configuration option.
+      def chef_binary_path(binary)
+        return binary if !config.binary_path
+        return File.join(config.binary_path, binary)
+      end
+
       def chown_provisioning_folder
         vm.ssh.execute do |ssh|
           ssh.sudo!("mkdir -p #{config.provisioning_path}")
@@ -52,7 +59,7 @@ module Vagrant
 
         # Merge with the "extra data" which isn't put under the
         # vagrant namespace by default
-        data.merge!(config.json)
+        data.merge!(config.merged_json)
 
         json = data.to_json
 
@@ -69,6 +76,8 @@ module Vagrant
     class Chef < Base
       # This is the configuration which is available through `config.chef`
       class Config < Vagrant::Config::Base
+        extend Util::Counter
+
         # Shared config
         attr_accessor :node_name
         attr_accessor :provisioning_path
@@ -81,11 +90,14 @@ module Vagrant
         attr_accessor :https_proxy_user
         attr_accessor :https_proxy_pass
         attr_accessor :no_proxy
+        attr_accessor :binary_path
+        attr_accessor :binary_env
+        attr_accessor :run_list
 
         def initialize
-          @provisioning_path = "/tmp/vagrant-chef"
+          @provisioning_path = "/tmp/vagrant-chef-#{self.class.get_and_update_counter}"
           @log_level = :info
-          @json = { :instance_role => "vagrant" }
+          @json = {}
           @http_proxy = nil
           @http_proxy_user = nil
           @http_proxy_pass = nil
@@ -93,16 +105,17 @@ module Vagrant
           @https_proxy_user = nil
           @https_proxy_pass = nil
           @no_proxy = nil
+          @binary_path = nil
+          @binary_env = nil
+          @run_list = []
         end
 
-        # Returns the run list for the provisioning
-        def run_list
-          json[:run_list] ||= []
-        end
-
-        # Sets the run list to the specified value
-        def run_list=(value)
-          json[:run_list] = value
+        # This returns the json that is merged with the defaults and the
+        # user set data.
+        def merged_json
+          { :instance_role => "vagrant",
+            :run_list      => run_list
+          }.merge(json || {})
         end
 
         # Adds a recipe to the run list

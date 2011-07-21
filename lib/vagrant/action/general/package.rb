@@ -38,8 +38,12 @@ module Vagrant
         end
 
         def recover(env)
-          # Cleanup any packaged files if the packaging failed at some point.
-          File.delete(tar_path) if File.exist?(tar_path)
+          # Don't delete the tar_path if the error is that the output already
+          # exists, since this will nuke the user's previous file.
+          if !env["vagrant.error"].is_a?(Errors::PackageOutputExists)
+						# Cleanup any packaged files if the packaging failed at some point.
+						File.delete(tar_path) if File.exist?(tar_path)
+					end
         end
 
         def files_to_copy

@@ -25,8 +25,15 @@ module Vagrant
 
           if enable_network?
             @env.ui.info I18n.t("vagrant.actions.vm.network.enabling")
-            @env.env.config.vm.network_options.compact.each do |network_options|
+
+            # Prepare for new networks...
+            options = @env.env.config.vm.network_options.compact
+            options.each do |network_options|
               @env["vm"].system.prepare_host_only_network(network_options)
+            end
+
+            # Then enable the networks...
+            options.each do |network_options|
               @env["vm"].system.enable_host_only_network(network_options)
             end
           end
@@ -64,7 +71,7 @@ module Vagrant
             adapter = @env["vm"].vm.network_adapters[network_options[:adapter]]
             adapter.enabled = true
             adapter.attachment_type = :host_only
-            adapter.host_interface = network_name(network_options)
+            adapter.host_only_interface = network_name(network_options)
             adapter.mac_address = network_options[:mac].gsub(':', '') if network_options[:mac]
             adapter.save
           end

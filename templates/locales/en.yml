@@ -2,6 +2,14 @@ en:
   vagrant:
     general:
       creating_home_dir: "Creating home directory since it doesn't exist: %{directory}"
+      moving_home_dir: "Moving old Vagrant home directory to new location: %{directory}"
+      home_dir_migration_failed: |-
+        Both an old and new Vagrant home directory exist. Only the new one will
+        be used. Please merge the old directory into the new directory if you'd
+        like to use the old data as well.
+
+        Old: %{old}
+        New: %{new}
 
 #-------------------------------------------------------------------------------
 # Translations for exception classes
@@ -31,6 +39,11 @@ en:
         this command in another directory. If you aren't in a home directory,
         then please rename ".vagrant" to something else, or configure Vagrant
         to use another filename by modifying `config.vagrant.dotfile_name`.
+      environment_locked: |-
+        An instance of Vagrant is already running. Only one instance of Vagrant
+        may run at any given time to avoid problems with VirtualBox inconsistencies
+        occurring. Please wait for the other instance of Vagrant to end and then
+        try again.
       interrupted: "Vagrant exited after cleanup due to external interrupt."
       multi_vm_required: "A multi-vm environment is required for name specification to this command."
       multi_vm_target_required: "`vagrant %{command}` requires a specific VM name to target in a multi-VM environment."
@@ -127,17 +140,22 @@ en:
         %{file}
       virtualbox_invalid_version: |-
         Vagrant has detected that you have VirtualBox version %{version} installed!
-        Vagrant requires that you use at least VirtualBox version 4.0. Please install
+        Vagrant requires that you use at least VirtualBox version 4.1. Please install
         a more recent version of VirtualBox to continue.
 
-        The Vagrant 0.6.x series supports VirtualBox 3.2, so if you're stuck with that
-        version, then please use the 0.6.x series of Vagrant.
+        Early versions of Vagrant support earlier versions of VirtualBox. Specifically,
+        the 0.7.x series supports VirtualBox 4.0.x and the 0.6.x series supports VirtualBox
+        3.2.x. Please use the version you need.
 
-        Any earlier versions of VirtualBox are completely unsupported. Please upgrade.
+        Any newer versions may not be supported yet. Please check the mailing list
+        for any announcements of newer versions.
       virtualbox_not_detected: |-
         Vagrant could not detect VirtualBox! Make sure VirtualBox is properly installed.
         If VirtualBox is installed, it may be an incorrect version. Vagrant currently
         requires VirtualBox 4.0.x. Please install the proper version to continue.
+
+        If you have an older or newer version of VirtualBox, please make sure you're
+        using the proper version of Vagrant. Ask the mailing list if you have questions.
       virtualbox_not_detected_win64: |-
         Vagrant could not detect VirtualBox! Make sure VirtualBox is properly installed
         with version 4.0.0 or higher.
@@ -159,7 +177,7 @@ en:
 #-------------------------------------------------------------------------------
     config:
       common:
-        error_empty: `%{field}` must be filled in.
+        error_empty: "`%{field}` must be filled in."
       chef:
         run_list_empty: "Run list must not be empty."
         cookbooks_path_empty: "Must specify a cookbooks path for chef solo."
@@ -173,6 +191,9 @@ en:
         box_missing: "A box must be specified."
         box_not_found: "The box '%{name}' could not be found."
         shared_folder_hostpath_missing: "Shared folder host path for '%{name}' doesn't exist: %{path}"
+        shared_folder_nfs_owner_group: |-
+          Shared folder '%{name}': NFS does not support the owner/group settings.
+        provisioner_chef_server_changed: "The provisioner 'chef_server' is now 'chef_client'"
         provisioner_not_found: "The provisioner '%{shortcut}' doesn't exist."
         provisioner_invalid_class: "The provisioner '%{shortcut}' must inherit from `Vagrant::Provisioners::Base`."
 
@@ -185,8 +206,13 @@ en:
       box:
         no_installed_boxes: "There are no installed boxes! Use `vagrant box add` to add some."
       ssh:
-        execute: "Execute: %{command}"
+        command: "Command: %{command}"
       status:
+        aborted: |-
+          The VM is in an aborted state. This means that it was abruptly
+          stopped without properly closing the session. Run `vagrant up`
+          to resume this virtual machine. If any problems persist, you may
+          have to destroy and restart the virtual machine.
         output: |-
           Current VM states:
 
@@ -387,7 +413,6 @@ en:
           persisting: "Persisting the VM UUID (%{uuid})..."
         provision:
           beginning: "Running provisioner: %{provisioner}..."
-          enabled: "Provisioning enabled with %{provisioner}..."
         resume:
           resuming: Resuming suspended VM...
         share_folders:
@@ -442,6 +467,11 @@ en:
           An error occurred while trying to download the specified box. This most
           often happens if there is no internet connection or the address is
           invalid.
+        status_error: |-
+          Bad status code: %{status}
+
+          Please verify that the box exists and is accessible. Also verify that
+          this computer is properly connected to the internet.
 
     hosts:
       bsd:
@@ -460,9 +490,10 @@ en:
         json: "Generating chef JSON and uploading..."
         client_key_folder: "Creating folder to hold client key..."
         upload_validation_key: "Uploading chef client validation key..."
+        upload_encrypted_data_bag_secret_key: "Uploading chef encrypted data bag secret key..."
         running_client: "Running chef-client..."
         running_solo: "Running chef-solo..."
-        invalid_provisioner: "Vagrant::Provisioners::Chef is not a valid provisioner! Use ChefSolo or ChefServer instead."
+        invalid_provisioner: "Vagrant::Provisioners::Chef is not a valid provisioner! Use ChefSolo or ChefClient instead."
         not_detected: |-
           The `%{binary}` binary appears to not be in the PATH of the guest. This
           could be because the PATH is not properly setup or perhaps chef is not
@@ -500,7 +531,8 @@ en:
         running_puppetd: "Running Puppet agent..."
 
       shell:
-        path_not_set: "`path` parameter pointing to script file to execute for shell provisioner is required"
+        path_and_inline_set: "Only one of `path` or `inline` may be set."
+        no_path_or_inline: "One of `path` or `inline` must be set."
         path_invalid: "`path` for shell provisioner does not exist on the host system: %{path}"
         upload_path_not_set: "`upload_path` must be set for the shell provisioner."
 

@@ -1,5 +1,4 @@
 require 'rbconfig'
-require 'mario'
 
 module Vagrant
   module Util
@@ -29,8 +28,10 @@ module Vagrant
         end
 
         def arch?
-          linux?() and File.exist?('/etc/rc.conf') and
-            File.exist?('/etc/pacman.conf') and File.exist?('/etc/rc.d/')
+          linux? &&
+            File.exist?('/etc/rc.conf') &&
+            File.exist?('/etc/pacman.conf') &&
+            File.exist?('/etc/rc.d/')
         end
 
         # Returns boolean noting whether this is a 64-bit CPU. This
@@ -51,7 +52,7 @@ module Vagrant
 
         def tar_file_options
           # create, write only, fail if the file exists, binary if windows
-          File::WRONLY|File::EXCL|File::CREAT|(Mario::Platform.windows? ? File::BINARY : 0)
+          File::WRONLY | File::EXCL | File::CREAT | (windows? ? File::BINARY : 0)
         end
 
         def platform

@@ -7,6 +7,7 @@ class ClearSharedFoldersVMActionTest < Test::Unit::TestCase
 
     @vm = mock("vm")
     @env["vm"] = @vm
+    @env["vm.modify"] = mock("proc")
 
     @internal_vm = mock("internal")
     @vm.stubs(:vm).returns(@internal_vm)
@@ -15,15 +16,6 @@ class ClearSharedFoldersVMActionTest < Test::Unit::TestCase
   end
 
   context "calling" do
-    should "call the proper methods in sequence" do
-      seq = sequence("seq")
-      @instance.expects(:clear_shared_folders).once.in_sequence(seq)
-      @app.expects(:call).with(@env).once
-      @instance.call(@env)
-    end
-  end
-
-  context "clearing shared folders" do
     setup do
       @shared_folder = mock("shared_folder")
       @shared_folders = [@shared_folder]
@@ -36,14 +28,13 @@ class ClearSharedFoldersVMActionTest < Test::Unit::TestCase
         sf.expects(:destroy).once.in_sequence(destroy_seq)
       end
 
-      @vm.expects(:reload!).once.in_sequence(destroy_seq)
-      @instance.clear_shared_folders
-    end
+      @env["vm.modify"].expects(:call).with() do |proc|
+        proc.call(@internal_vm)
+        true
+      end
 
-    should "do nothing if no shared folders existed" do
-      @shared_folders.clear
-      @vm.expects(:reload!).never
-      @instance.clear_shared_folders
+      @app.expects(:call).with(@env).once
+      @instance.call(@env)
     end
   end
 end

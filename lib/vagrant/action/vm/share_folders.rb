@@ -33,16 +33,18 @@ module Vagrant
         end
 
         def create_metadata
-          @env.ui.info I18n.t("vagrant.actions.vm.share_folders.creating")
+          proc = lambda do |vm|
+            @env.ui.info I18n.t("vagrant.actions.vm.share_folders.creating")
 
-          shared_folders.each do |name, data|
-            folder = VirtualBox::SharedFolder.new
-            folder.name = name
-            folder.host_path = File.expand_path(data[:hostpath], @env.env.root_path)
-            @env["vm"].vm.shared_folders << folder
+            shared_folders.each do |name, data|
+              folder = VirtualBox::SharedFolder.new
+              folder.name = name
+              folder.host_path = File.expand_path(data[:hostpath], @env.env.root_path)
+              vm.shared_folders << folder
+            end
           end
 
-          @env["vm"].vm.save
+          @env["vm.modify"].call(proc)
         end
 
         def mount_shared_folders
@@ -55,7 +57,13 @@ module Vagrant
                 @env.ui.info(I18n.t("vagrant.actions.vm.share_folders.mounting_entry",
                                     :name => name,
                                     :guest_path => data[:guestpath]))
-                @env["vm"].system.mount_shared_folder(ssh, name, data[:guestpath])
+
+                # Calculate the owner and group
+                owner = data[:owner] || @env["config"].ssh.username
+                group = data[:group] || @env["config"].ssh.username
+
+                # Mount the actual folder
+                @env["vm"].system.mount_shared_folder(ssh, name, data[:guestpath], owner, group)
               else
                 # If no guest path is specified, then automounting is disabled
                 @env.ui.info(I18n.t("vagrant.actions.vm.share_folders.nomount_entry",

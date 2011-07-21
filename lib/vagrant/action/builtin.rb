@@ -14,7 +14,6 @@ module Vagrant
       # environment.
       register(:start, Builder.new do
         use VM::CleanMachineFolder
-        use VM::Customize
         use VM::ClearForwardedPorts
         use VM::ForwardPorts
         use VM::Provision
@@ -23,6 +22,8 @@ module Vagrant
         use VM::ShareFolders
         use VM::HostName
         use VM::Network
+        use VM::Customize
+        use VM::Modify
         use VM::Boot
       end)
 
@@ -61,6 +62,7 @@ module Vagrant
       # destroy - Halts, cleans up, and destroys an existing VM
       register(:destroy, Builder.new do
         use Action[:halt], :force => true
+        use VM::ProvisionerCleanup
         use VM::ClearNFSExports
         use VM::Destroy
         use VM::CleanMachineFolder
@@ -72,6 +74,7 @@ module Vagrant
         use Action[:halt]
         use VM::ClearForwardedPorts
         use VM::ClearSharedFolders
+        use VM::Modify
         use VM::Export
         use VM::PackageVagrantfile
         use VM::Package

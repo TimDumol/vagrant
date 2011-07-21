@@ -1,8 +1,8 @@
 require "test_helper"
 
-class ChefServerProvisionerTest < Test::Unit::TestCase
+class ChefClientProvisionerTest < Test::Unit::TestCase
   setup do
-    @klass = Vagrant::Provisioners::ChefServer
+    @klass = Vagrant::Provisioners::ChefClient
 
     @action_env = Vagrant::Action::Environment.new(vagrant_env.vms[:default].env)
 
@@ -161,7 +161,9 @@ class ChefServerProvisionerTest < Test::Unit::TestCase
         :validation_key => @action.guest_validation_key_path,
         :client_key => @config.client_key_path,
         :file_cache_path => @config.file_cache_path,
-        :file_backup_path => @config.file_backup_path
+        :file_backup_path => @config.file_backup_path,
+        :environment => @config.environment,
+        :encrypted_data_bag_secret => @config.encrypted_data_bag_secret
       })
 
       @action.setup_server_config
@@ -174,8 +176,8 @@ class ChefServerProvisionerTest < Test::Unit::TestCase
       @vm.ssh.stubs(:execute).yields(@ssh)
     end
 
-    should "cd into the provisioning directory and run chef client" do
-      @ssh.expects(:sudo!).with(["cd #{@config.provisioning_path}", "chef-client -c client.rb -j dna.json"]).once
+    should "run chef client" do
+      @ssh.expects(:sudo!).with("chef-client -c #{@config.provisioning_path}/client.rb -j #{@config.provisioning_path}/dna.json").once
       @action.run_chef_client
     end
 

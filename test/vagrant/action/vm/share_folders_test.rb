@@ -10,6 +10,7 @@ class ShareFoldersVMActionTest < Test::Unit::TestCase
     @vm.stubs(:ssh).returns(mock("ssh"))
     @vm.stubs(:system).returns(mock("system"))
     @env["vm"] = @vm
+    @env["vm.modify"] = mock("proc")
 
     @internal_vm = mock("internal")
     @vm.stubs(:vm).returns(@internal_vm)
@@ -105,7 +106,11 @@ class ShareFoldersVMActionTest < Test::Unit::TestCase
       end
 
       @internal_vm.stubs(:shared_folders).returns(shared_folders)
-      @internal_vm.expects(:save).once
+
+      @env["vm.modify"].expects(:call).with() do |proc|
+        proc.call(@internal_vm)
+        true
+      end
 
       @instance.create_metadata
     end
@@ -114,8 +119,8 @@ class ShareFoldersVMActionTest < Test::Unit::TestCase
   context "mounting the shared folders" do
     setup do
       @folders = stub_shared_folders(<<-sf)
-        config.vm.share_folder("foo", "fooguest", "foohost")
-        config.vm.share_folder("bar", "barguest", "barhost")
+        config.vm.share_folder("foo", "fooguest", "foohost", :owner => "yo", :group => "fo")
+        config.vm.share_folder("bar", "barguest", "barhost", :owner => "foo", :group => "bar")
         config.vm.share_folder("foo_no_mount", nil, "foohost2")
       sf
       @ssh = mock("ssh")
@@ -127,9 +132,9 @@ class ShareFoldersVMActionTest < Test::Unit::TestCase
       mount_seq = sequence("mount_seq")
       @folders.each do |name, data|
         if data[:guestpath]
-          @vm.system.expects(:mount_shared_folder).with(@ssh, name, data[:guestpath]).in_sequence(mount_seq)
+          @vm.system.expects(:mount_shared_folder).with(@ssh, name, data[:guestpath], data[:owner], data[:group]).in_sequence(mount_seq)
         else
-          @vm.system.expects(:mount_shared_folder).with(@ssh, name, anything).never
+          @vm.system.expects(:mount_shared_folder).with(@ssh, name, anything, anything, anything).never
         end
       end
 

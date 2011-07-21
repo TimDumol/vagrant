@@ -20,8 +20,6 @@ module Vagrant
       attr_reader :network_options
       attr_reader :provisioners
       attr_accessor :disk_image_format
-      attr_writer :shared_folder_uid
-      attr_writer :shared_folder_gid
       attr_accessor :system
 
       def initialize
@@ -46,7 +44,10 @@ module Vagrant
       def share_folder(name, guestpath, hostpath, opts=nil)
         @shared_folders[name] = {
           :guestpath => guestpath,
-          :hostpath => hostpath
+          :hostpath => hostpath,
+          :owner => nil,
+          :group => nil,
+          :nfs   => false
         }.merge(opts || {})
       end
 
@@ -71,14 +72,6 @@ module Vagrant
       # in Vagrant 0.7.0.
       def provisioner=(_value)
         raise Errors::VagrantError, :_key => :provisioner_equals_not_supported
-      end
-
-      def shared_folder_uid
-        @shared_folder_uid || env.config.ssh.username
-      end
-
-      def shared_folder_gid
-        @shared_folder_gid || env.config.ssh.username
       end
 
       def customize(&block)
@@ -125,11 +118,22 @@ module Vagrant
                        :name => name,
                        :path => options[:hostpath]))
           end
+
+          if options[:nfs] && (options[:owner] || options[:group])
+            # Owner/group don't work with NFS
+            errors.add(I18n.t("vagrant.config.vm.shared_folder_nfs_owner_group",
+                              :name => name))
+          end
         end
 
         # Each provisioner can validate itself
         provisioners.each do |prov|
-          prov.validate(errors)
+          # TODO: Remove at some point
+          if prov.shortcut == :chef_server
+            errors.add(I18n.t("vagrant.config.vm.provisioner_chef_server_changed"))
+          else
+            prov.validate(errors)
+          end
         end
       end
     end

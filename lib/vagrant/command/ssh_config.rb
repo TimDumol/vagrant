@@ -14,11 +14,13 @@ module Vagrant
         vm.ssh.check_key_permissions(vm.env.config.ssh.private_key_path)
 
         $stdout.puts(Util::TemplateRenderer.render("ssh_config", {
-          :host_key => options[:host] || "vagrant",
+          :host_key => options[:host] || vm.name || "vagrant",
           :ssh_host => vm.env.config.ssh.host,
           :ssh_user => vm.env.config.ssh.username,
           :ssh_port => vm.ssh.port,
-          :private_key_path => vm.env.config.ssh.private_key_path
+          :private_key_path => vm.env.config.ssh.private_key_path,
+          :forward_agent => vm.env.config.ssh.forward_agent,
+          :forward_x11   => vm.env.config.ssh.forward_x11
         }))
       end
     end
